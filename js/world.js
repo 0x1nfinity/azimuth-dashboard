@@ -1,0 +1,389 @@
+// world.js — layout & gambar kantor Azimuth (top-down, canvas 1000×640).
+// REFACTOR 2026-10-11 (permintaan operator): dunia lama (1440×900 — kantor pribadi
+// DECIDER, ruang meeting, ruang server, open-area, pantry, teras + kolam) terlalu
+// luas untuk 6 agent → SATU ruangan besar open-plan.
+// REVISI KETIGA (umpan balik "kosong, furnitur tumpang tindih, ukuran tak
+// proporsional"): semua furnitur diperbesar ~1.25× (meja 96→120px, monitor
+// 50→64px, kursi 64→72px), chibi diperbesar 1.45× (sim.js) supaya sebanding,
+// kolom meja digeser ke dalam (x 110/780 → 136/744) dan VENUE KICKOFF pindah ke
+// meja meeting sungguhan di tengah (pengisi zona kosong) — bukan karpet kosong.
+// Semua footprint dihitung ulang & bebas tumpang-tindih:
+//   meja   x..x+120 × y+16..y+96   monitor x±(mw/2) × y-14..y+43
+//   kursi  cx±36   × y+52..y+124   (cx = x+60)
+//   baris y = 66/260/454 → kursi bawah 190/384/578 (dinding 600), koridor
+//   antar-baris 56px (h1 y≈218, h2 y≈412) tepat untuk chibi 50px.
+// Engine & aset CC0 tetap (port Automation-project). Layer statis dirender sekali
+// ke offscreen canvas; per frame hanya animasi ringan (uap kopi, LED rak, layar).
+
+export const W = 1000;
+export const H = 640;
+
+// ---------- palet ----------
+const C = {
+  wall: "#c9ab86", wallDark: "#a98d68", glass: "rgba(210,235,250,0.35)",
+  floor: "#f2e7d4", floorLine: "rgba(180,150,110,0.18)",
+  desk: "#e2c89a", deskEdge: "#c8a97a", chair: "#8d99ae",
+  monitor: "#2b3442", screenOff: "#141a24",
+  rack: "#3a4252", rackEdge: "#232936",
+  coffee: "#7c4a2d", counter: "#d9c3a5",
+  plantPot: "#b5683f", plant: "#3f9d54", plant2: "#57b96b",
+};
+
+// ---------- layout ----------
+// 6 meja 2 kolom × 3 baris, kolom digeser ke dalam; tengah = meja meeting.
+// Lantai dalam = 40..960 × 40..600 (dinding tebal 40 di tepi kanvas).
+export const DESKS = {
+  bima:  { x: 136, y: 66,  room: "bima" },      // DECIDER — depan layar status
+  bagas: { x: 744, y: 66,  room: "server" },    // ROUTER — dekat rak mini
+  raka:  { x: 136, y: 260, room: "analisis" },  // ANALYST
+  sari:  { x: 744, y: 260, room: "eksekusi" },  // MANAGER
+  maya:  { x: 136, y: 454, room: "eksekusi" },  // AUDITOR
+  citra: { x: 744, y: 454, room: "analisis" },  // CURATOR
+};
+export const deskChair = (d) => ({ x: d.x + 60, y: d.y + 104 }); // jangkar duduk sepertiga-bawah kursi (kepala chibi 1.45× bebas menutupi layar monitor)
+
+// Titik berkumpul kickoff/celebrasi — MENGELILINGI meja meeting tengah.
+export const GATHER_SPOTS = [
+  { x: 330, y: 330 }, { x: 450, y: 240 }, { x: 550, y: 240 },
+  { x: 670, y: 330 }, { x: 450, y: 415 }, { x: 550, y: 415 },
+];
+
+// ---------- graf jalan ----------
+// Dua koridor horizontal (celah antar baris meja) + vertikal penghubung.
+// Vertikal hanya di x yang BEBAS dari meja/meeting: 120, 288, 712, 880
+// (196/804 memotong meja baris 2; 500 memotong meja meeting).
+export const NODES = {};
+function n(id, x, y) { NODES[id] = { id, x, y, adj: new Set() }; }
+const H_XS = [120, 196, 288, 500, 712, 804, 880];
+H_XS.forEach((x) => { n(`h1_${x}`, x, 218); n(`h2_${x}`, x, 412); });
+const E = (a, b) => { NODES[a].adj.add(b); NODES[b].adj.add(a); };
+for (const row of ["h1", "h2"]) H_XS.forEach((x, i) => { if (i) E(`${row}_${H_XS[i - 1]}`, `${row}_${x}`); });
+for (const x of [120, 288, 712, 880]) E(`h1_${x}`, `h2_${x}`);
+for (const [id, d] of Object.entries(DESKS)) n(`desk_${id}`, deskChair(d).x, deskChair(d).y);
+E("desk_bima", "h1_196"); E("desk_bagas", "h1_804");
+E("desk_raka", "h2_196"); E("desk_maya", "h2_196");
+E("desk_sari", "h2_804"); E("desk_citra", "h2_804");
+// titik ngopi di depan counter dinding atas-kiri (bebas dari meja bima x136)
+n("coffee_0", 88, 150); n("coffee_1", 88, 196);
+E("coffee_0", "coffee_1"); E("coffee_1", "h1_120");
+// titik kickoff mengelilingi meja meeting (atas → koridor h1, bawah → h2)
+GATHER_SPOTS.forEach((s, i) => {
+  n(`gather_${i}`, s.x, s.y);
+  const row = s.y < 315 ? "h1" : "h2";
+  const near = H_XS.reduce((a, b) => (Math.abs(b - s.x) < Math.abs(a - s.x) ? b : a));
+  E(`gather_${i}`, `${row}_${near}`);
+});
+
+export function shortestPath(fromId, toId) {
+  if (fromId === toId) return [toId];
+  const prev = { [fromId]: null };
+  const q = [fromId];
+  while (q.length) {
+    const cur = q.shift();
+    for (const nb of NODES[cur].adj) {
+      if (nb in prev) continue;
+      prev[nb] = cur;
+      if (nb === toId) {
+        const path = [nb];
+        let p = cur;
+        while (p) { path.unshift(p); p = prev[p]; }
+        return path;
+      }
+      q.push(nb);
+    }
+  }
+  return null;
+}
+
+// ---------- helper gambar ----------
+// ---------- aset furnitur CC0 (Ninja Adventure / Kenney — gaya sama dgn karakter) ----------
+const FURN = { pot: { img: null, ok: false }, grass: { img: null, ok: false }, crate: { img: null, ok: false }, kenney: { img: null, ok: false }, dindingT: { img: null, ok: false } };
+let furniturSiap = false;
+function muatFurnitur() {
+  if (muatFurnitur._jalan) return;
+  muatFurnitur._jalan = true;
+  const selesai = () => { if (Object.values(FURN).every((f) => f.ok)) { furniturSiap = true; staticLayer = null; } };
+  for (const [k, file] of [["pot", "pot.png"], ["grass", "grass.png"], ["crate", "crate.png"], ["kenney", "kenney_indoor.png"], ["dindingT", "tileset_wall_simple.png"]]) {
+    const im = new Image();
+    // simpan referensi DULU, baru set src — loader sinkron (test Node) memicu
+    // onload SEBELUM baris penugasan tercapai bila urutannya dibalik
+    FURN[k].img = im;
+    im.onload = () => { FURN[k].ok = true; selesai(); };
+    im.onerror = () => selesai();
+    im.src = "assets/furniture/" + file;
+  }
+}
+// pixel rect (grid 4px — serasi sprite karakter)
+function px(ctx, x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(Math.round(x / 4) * 4, Math.round(y / 4) * 4, Math.ceil(w / 4) * 4, Math.ceil(h / 4) * 4); }
+function sprite(ctx, key, x, y, w, h) { const f = FURN[key]; if (f && f.ok) { ctx.imageSmoothingEnabled = false; ctx.drawImage(f.img, x, y, w, h); ctx.imageSmoothingEnabled = true; return true; } return false; }
+// tile Kenney Roguelike Indoor (16px, grid 17): (kolom,baris) → gambar berskala S
+const TS = 16, TG = 17;
+function tile(ctx, kol, bar, x, y, s = 5, sw = TS, sh = TS) {
+  const f = FURN.kenney;
+  if (!f || !f.ok) return false;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(f.img, kol * TG, bar * TG, sw, sh, x, y, sw * s, sh * s);
+  ctx.imageSmoothingEnabled = true;
+  return true;
+}
+// pola bata utk dinding: tile 16px (kol 1, baris 6 = wajah bata cokelat) diskalakan 40px → pattern
+let polaBata = null;
+function buatPolaBata() {
+  if (polaBata || !FURN.dindingT.ok) return polaBata;
+  const c = document.createElement("canvas");
+  c.width = 40; c.height = 40;
+  const g = c.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.drawImage(FURN.dindingT.img, 16, 96, 16, 16, 0, 0, 40, 40);
+  polaBata = c;
+  return polaBata;
+}
+// dinding bertekstur: segmen horizontal/vertikal tebal 40px, outline gelap + bayangan halus
+function dindingBata(ctx, x1, y1, x2, y2) {
+  const p = buatPolaBata();
+  const x = Math.min(x1, x2), y = Math.min(y1, y2);
+  const w = Math.max(Math.abs(x2 - x1), 40), h = Math.max(Math.abs(y2 - y1), 40);
+  // bayangan lembut (arah bawah-kanan)
+  ctx.fillStyle = "rgba(15,10,5,0.18)";
+  ctx.fillRect(x + 3, y + 3, w, h);
+  if (p) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    const pat = ctx.createPattern(p, "repeat");
+    ctx.fillStyle = pat;
+    ctx.translate(x, y); ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+  } else {
+    ctx.fillStyle = "#837163"; ctx.fillRect(x, y, w, h);
+  }
+  ctx.strokeStyle = "rgba(25,18,10,0.55)"; ctx.lineWidth = 3;
+  ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+}
+
+function rr(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+}
+function plant(ctx, x, y) {
+  if (tile(ctx, 5, 12, x - 27, y - 52, 5)) return; // plant Kenney 80×80
+  if (sprite(ctx, "grass", x - 18, y - 34, 36, 36) && sprite(ctx, "pot", x - 13, y - 6, 26, 22)) return;
+  px(ctx, x - 10, y + 4, 20, 14, C.plantPot);
+  px(ctx, x - 9, y - 4, 18, 6, "#8a5a3a");
+  for (const [dx, dy, r, col] of [[-8, -2, 9, C.plant], [8, -2, 9, C.plant], [0, -10, 11, C.plant2]]) {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2); ctx.fill();
+  }
+}
+const WARNA_LAYAR = { bima: "#7dd3fc", analisis: "#a5b4fc", eksekusi: "#fda4af", server: "#93c5fd" };
+function drawDesk(ctx, d) {
+  // kursi (sprite Kenney 5,4 s=4.5 → 72×72; digambar dulu — di belakang meja & agent)
+  const cx = d.x + 60, cy = d.y + 52;
+  if (!tile(ctx, 5, 4, cx - 36, cy, 4.5)) {
+    px(ctx, cx - 15, cy + 8, 30, 20, "#6b7a8f");
+    px(ctx, cx - 15, cy - 6, 7, 21, "#566275"); px(ctx, cx + 8, cy - 6, 7, 21, "#566275");
+  }
+  // meja: 2 tile kayu Kenney (7,4)+(8,4) digabung → 120×80 (proporsi chibi ~50px)
+  if (!tile(ctx, 7, 4, d.x, d.y + 16, 5, 24, 16)) {
+    px(ctx, d.x, d.y + 16, 120, 40, "#b98a56");
+    px(ctx, d.x, d.y + 16, 120, 9, "#caa06b");
+    px(ctx, d.x, d.y + 46, 120, 9, "#9a6f42");
+    px(ctx, d.x, d.y + 16, 5, 40, "#7c5a35"); px(ctx, d.x + 115, d.y + 16, 5, 40, "#7c5a35");
+  }
+  // monitor 64×42 (bima 84×42) — meja 120px, semua elemen diskalakan ikut
+  const mw = d === DESKS.bima ? 84 : 64, mh = 42;
+  const mx = d.x + (120 - mw) / 2;
+  px(ctx, mx - 4, d.y - 14, mw + 8, mh + 14, "#2b3442");
+  px(ctx, mx, d.y - 10, mw, mh, "#141a24");
+  px(ctx, mx + 4, d.y - 6, mw - 8, mh - 8, WARNA_LAYAR[d.room] || "#9fb4d0");
+  px(ctx, mx + 8, d.y - 2, 12, 8, "rgba(255,255,255,0.35)");
+  px(ctx, mx + mw / 2 - 8, d.y + 32, 16, 6, "#2b3442");
+  px(ctx, mx + mw / 2 - 18, d.y + 38, 36, 5, "#232a36");
+  // mug saja (keyboard & mouse dihapus — kurangi kebisingan)
+  px(ctx, d.x + 92, d.y + 34, 12, 14, "#f8fafc"); px(ctx, d.x + 104, d.y + 38, 5, 7, "#f8fafc");
+}
+
+// ---------- layer statis (dirender sekali) ----------
+let staticLayer = null;
+
+export function drawStatic(ctx) {
+  // lantai papan-catur krem memenuhi seluruh kanvas — bahasa desain Star-Office
+  const cekA = "#ece3d0", cekB = "#e2d6bf";
+  ctx.fillStyle = cekA; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = cekB;
+  for (let ry = 0; ry < H / 80; ry++)
+    for (let rx = 0; rx < W / 80; rx++)
+      if ((ry + rx) % 2) ctx.fillRect(rx * 80, ry * 80, 80, 80);
+  ctx.strokeStyle = "rgba(122,98,66,0.12)"; ctx.lineWidth = 1;
+  for (let y = 0; y <= H; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  for (let x = 0; x <= W; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  // karpet zonasi ala Star-Office: krem berlapis bingkai cokelat hangat
+  const rug = (x, y, w, h) => {
+    ctx.fillStyle = "#b98d5e"; ctx.fillRect(x, y, w, h);                          // bingkai cokelat
+    ctx.fillStyle = "#e9ddc2"; ctx.fillRect(x + 10, y + 10, w - 20, h - 20);      // lapison
+    ctx.fillStyle = "#caa06b"; ctx.fillRect(x + 24, y + 24, w - 48, h - 48);      // garis dalam
+    ctx.fillStyle = "#e9ddc2"; ctx.fillRect(x + 34, y + 34, w - 68, h - 68);      // inti krem
+  };
+  rug(96, 244, 200, 352);   // kolom meja kiri (raka/maya)
+  rug(704, 244, 200, 352);  // kolom meja kanan (sari/citra)
+  rug(370, 258, 260, 140);  // zona meja meeting tengah
+
+  // dinding luar bata — TANPA sekat: satu ruangan besar (band 40px di tepi)
+  dindingBata(ctx, 0, 0, W, 40);
+  dindingBata(ctx, 0, H - 40, W, H);
+  dindingBata(ctx, 0, 0, 40, H);
+  dindingBata(ctx, W - 40, 0, W, H);
+
+  // layar status besar di dinding atas (runLabel digambar per frame)
+  px(ctx, 356, 32, 288, 76, "#2b3442"); px(ctx, 364, 40, 272, 60, "#141a24");
+  px(ctx, 374, 50, 100, 12, "rgba(125,211,252,0.5)");
+  px(ctx, 374, 72, 190, 8, "rgba(125,211,252,0.25)");
+  px(ctx, 560, 50, 120, 12, "rgba(251,191,36,0.4)");
+  px(ctx, 628, 72, 50, 8, "rgba(251,191,36,0.25)");
+
+  // counter kopi menempel dinding ATAS kiri (x 48..128 — bebas meja bima x136);
+  // spot ngopi (88,150)/(88,196) di bawahnya
+  if (!tile(ctx, 7, 4, 48, 44, 5, 16, 16)) {
+    px(ctx, 48, 44, 80, 80, "#b98a56"); px(ctx, 48, 44, 80, 8, "#caa06b"); px(ctx, 48, 116, 80, 8, "#9a6f42");
+  }
+  px(ctx, 56, 48, 34, 40, "#3f3244"); px(ctx, 60, 52, 26, 22, "#2b222e"); px(ctx, 64, 56, 7, 5, "#f59e0b"); // mesin kopi
+  for (const [mx, my] of [[104, 58], [104, 98]]) { px(ctx, mx, my, 14, 14, "#f8fafc"); px(ctx, mx + 12, my + 4, 4, 7, "#f8fafc"); px(ctx, mx - 5, my + 3, 5, 4, "#7c4a2d"); }
+
+  // rak server mini Bagas — dinding atas kanan (2 tile bertumpuk, x872..952 —
+  // 8px setelah meja bagas yang berakhir x864) + crate di bawah rak
+  for (let i = 0; i < 2; i++) {
+    if (!tile(ctx, 2, 12, 872, 44 + i * 80, 5)) { px(ctx, 872, 44 + i * 80, 80, 80, "#3a4252"); }
+  }
+  for (let l = 0; l < 5; l++) px(ctx, 884, 58 + l * 24, 8, 6, l % 2 ? "#4ade80" : "#22d3ee");
+  sprite(ctx, "crate", 888, 232, 52, 52); // di bawah rak, bebas koridor h1 (y192..246 melewati x880 — crate mulai x888)
+
+  // meja semua agent
+  for (const d of Object.values(DESKS)) drawDesk(ctx, d);
+
+  // meja meeting tengah — venue kickoff (menggantikan karpet kosong); rug-nya
+  // (370,258,260,140) sudah digambar di atas, meja 400..600 × 288..368 di tengahnya
+  px(ctx, 400, 288, 200, 80, "#b98a56");
+  px(ctx, 400, 288, 200, 12, "#caa06b");
+  px(ctx, 400, 352, 200, 12, "#9a6f42");
+  px(ctx, 400, 288, 6, 80, "#7c5a35"); px(ctx, 594, 288, 6, 80, "#7c5a35");
+  // dokumen & mug di atas meja meeting
+  px(ctx, 436, 308, 40, 26, "#f8fafc"); px(ctx, 442, 314, 28, 4, "rgba(60,40,20,0.25)"); px(ctx, 442, 322, 20, 4, "rgba(60,40,20,0.25)");
+  px(ctx, 524, 316, 40, 26, "#f8fafc"); px(ctx, 530, 322, 28, 4, "rgba(60,40,20,0.25)");
+  px(ctx, 492, 342, 12, 14, "#f8fafc"); px(ctx, 504, 346, 5, 7, "#f8fafc");
+  // serat kayu — meja meeting jangan terlihat seperti papan kosong
+  ctx.strokeStyle = "rgba(122,80,40,0.30)"; ctx.lineWidth = 2;
+  for (const gy of [316, 336, 356]) {
+    ctx.beginPath(); ctx.moveTo(412, gy); ctx.bezierCurveTo(460, gy - 4, 540, gy + 4, 588, gy); ctx.stroke();
+  }
+
+  // tanaman di sudut — semua tile 80×80 diverifikasi bebas dari meja (x136..256 /
+  // 744..864), kursi, rack (y..204), crate (y232..284), dan dinding (band 40px)
+  plant(ctx, 80, 560); plant(ctx, 320, 552); plant(ctx, 680, 552); plant(ctx, 907, 560);
+
+  // poster di dinding atas — celah antara counter/layar/rak, bebas dari monitor
+  // baris 1 (bima 154..238, bagas 772..836) dan layar status (356..644)
+  const poster = (x, y, w, bg, aksen) => {
+    px(ctx, x - 5, y - 5, w + 10, 44, "#7c5a35"); px(ctx, x, y, w, 34, bg);
+    px(ctx, x + 10, y + 5, 14, 24, aksen); px(ctx, x + w - 30, y + 5, 20, 24, "rgba(255,255,255,0.45)");
+    px(ctx, x + 30, y + 13, w - 60, 5, "rgba(60,40,20,0.35)");
+  };
+  poster(262, 48, 80, "#e8f0fe", "#7dd3fc");
+  poster(658, 48, 80, "#fde8f4", "#f472b6");
+}
+
+// ---------- layer dinamis (per frame, gated by tier) ----------
+export function drawWorld(ctx, t, opts = {}) {
+  if (typeof document !== "undefined" && !muatFurnitur._jalan) muatFurnitur();
+  const {
+    workingAgents = new Set(), errorActive = false, debugging = false, runLabel = "",
+    tier = "penuh", // "penuh" | "sedang" | "diam" — efek ambient dilewati saat diam
+    data = null,
+  } = opts;
+
+  if (!staticLayer && typeof document !== "undefined") {
+    staticLayer = document.createElement("canvas");
+    staticLayer.width = W; staticLayer.height = H;
+    drawStatic(staticLayer.getContext("2d"));
+  }
+  if (staticLayer) {
+    ctx.drawImage(staticLayer, 0, 0);
+  } else {
+    drawStatic(ctx); // fallback (non-browser)
+  }
+  if (tier === "diam") {
+    drawScreenLabel(ctx, runLabel);
+    return;
+  }
+
+  // ===== AMBIENT ANIMASI (ringan, gated tier) =====
+  // 1) uap kopi dari mesin di counter dinding atas-kiri
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  for (let i = 0; i < 3; i++) {
+    const ph = (t / 1400 + i * 0.33) % 1;
+    const sx2 = 62 + i * 10, sy2 = 46 - ph * 20;
+    ctx.globalAlpha = 0.55 * (1 - ph);
+    ctx.beginPath(); ctx.arc(sx2 + Math.sin(ph * 6.28) * 3, sy2, 3 + ph * 4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // 2) debu melayang di berkas cahaya layar/jendela atas
+  ctx.fillStyle = "rgba(255,250,220,0.5)";
+  for (let i = 0; i < 5; i++) {
+    const ph = (t / 9000 + i * 0.143) % 1;
+    const wx = 370 + i * 62 + Math.sin(t / 3000 + i) * 8;
+    ctx.globalAlpha = 0.18 + 0.22 * Math.sin(ph * Math.PI);
+    ctx.fillRect(wx, 120 + ph * 140, 2.5, 2.5);
+  }
+  ctx.globalAlpha = 1;
+  // 3) berkas cahaya atas (gradient diagonal, sangat halus)
+  const cahaya = ctx.createLinearGradient(350, 50, 650, 240);
+  cahaya.addColorStop(0, "rgba(255,244,200,0.10)");
+  cahaya.addColorStop(1, "rgba(255,244,200,0)");
+  ctx.fillStyle = cahaya;
+  ctx.fillRect(340, 40, 320, 200);
+
+  // 4) LED rak mini Bagas berkedip (hijau/cyan)
+  for (let l = 0; l < 5; l++) {
+    const on = Math.sin(t / 260 + l * 1.7) > 0;
+    ctx.fillStyle = on ? "#4ade80" : "rgba(74,222,128,0.25)";
+    ctx.fillRect(884, 58 + l * 24, 8, 6);
+    ctx.fillStyle = on ? "rgba(34,211,238,0.8)" : "rgba(34,211,238,0.2)";
+    ctx.fillRect(886, 66 + l * 24, 5, 4);
+  }
+  // 5) LED mode error — merah berkedip di rak yang sama
+  for (let led = 0; led < 6; led++) {
+    const on = errorActive
+      ? (Math.floor(t / 220 + led) % 3 === 0)
+      : (Math.floor(t / 900 + led * 2) % 4 === 0);
+    ctx.fillStyle = errorActive ? (on ? "#f87171" : "#7f1d1d") : on ? "#4ade80" : "#14532d";
+    ctx.beginPath(); ctx.arc(920 + (led % 2) * 16, 62 + Math.floor(led / 2) * 24, 4, 0, Math.PI * 2); ctx.fill();
+  }
+  if (debugging) {
+    ctx.fillStyle = `rgba(248,113,113,${0.25 + 0.25 * Math.sin(t / 150)})`;
+    rr(ctx, 726, 44, 156, 160, 10); ctx.fill();
+  }
+
+  drawScreenLabel(ctx, runLabel);
+
+  // glow monitor agent yang bekerja
+  const deskColor = {
+    raka: "#0284c7", citra: "#db2777", sari: "#0d9488", maya: "#d946ef",
+  };
+  for (const [id, working] of Object.entries({ ...deskColor, bagas: "#475569", bima: "#2563eb" })) {
+    if (!workingAgents.has(id)) continue;
+    const d = DESKS[id];
+    const mw = id === "bima" ? 76 : 60;
+    ctx.fillStyle = hexA(working, 0.55);
+    rr(ctx, d.x + 60 - (mw - 8) / 2, d.y + 2, mw - 8, 24, 4); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.font = "600 10px system-ui"; ctx.textAlign = "center";
+    ctx.fillText("● ● ●", d.x + 60, d.y + 19);
+  }
+}
+
+function drawScreenLabel(ctx, runLabel) {
+  ctx.fillStyle = "#7dd3fc"; ctx.font = "600 14px system-ui"; ctx.textAlign = "left";
+  ctx.fillText(runLabel || "Azimuth — siaga", 368, 88);
+}
+
+export function hexA(hex, a) {
+  const v = hex.replace("#", "");
+  const r = parseInt(v.slice(0, 2), 16), g = parseInt(v.slice(2, 4), 16), b = parseInt(v.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
