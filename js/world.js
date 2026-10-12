@@ -55,12 +55,12 @@ export const deskChair = (d) => ({ x: d.x + 60, y: d.y + 102 }); // jangkar dudu
 // celebrasi, dan rapat duduk DI KURSI mengelilingi meja, bukan berdiri.
 // dir = arah hadap chibi saat duduk (0=bawah/ke meja dari utara, dst).
 export const GATHER_SPOTS = [
-  { x: 500, y: 195, dir: 0 },   // utara — menghadap meja (ke bawah)
-  { x: 582, y: 242, dir: 2 },   // timur laut — menghadap kiri
-  { x: 582, y: 338, dir: 2 },   // tenggara — menghadap kiri
-  { x: 500, y: 385, dir: 1 },   // selatan — menghadap meja (ke atas)
-  { x: 418, y: 338, dir: 3 },   // barat daya — menghadap kanan
-  { x: 418, y: 242, dir: 3 },   // barat laut — menghadap kanan
+  { x: 500, y: 223, dir: 0 },   // utara — menghadap meja (ke bawah)
+  { x: 582, y: 270, dir: 2 },   // timur laut — menghadap kiri
+  { x: 582, y: 366, dir: 2 },   // tenggara — menghadap kiri
+  { x: 500, y: 413, dir: 1 },   // selatan — menghadap meja (ke atas)
+  { x: 418, y: 366, dir: 3 },   // barat daya — menghadap kanan
+  { x: 418, y: 270, dir: 3 },   // barat laut — menghadap kanan
 ];
 
 // ---------- graf jalan ----------
@@ -295,7 +295,7 @@ export function drawStatic(ctx) {
   rug(116, 70, 770, 516);   // SATU karpet zona besar di bawah seluruh kisi meja
   // karpet bundar ELIPS (semi-3D: lingkaran di lantai tampak gepeng) + meja silinder
   for (const [rx, ry, c] of [[150, 108, "#b98d5e"], [136, 98, "#e9ddc2"], [116, 84, "#caa06b"], [104, 75, "#e9ddc2"]]) {
-    ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(500, 290, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(500, 318, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   // dinding luar bata — TANPA sekat: satu ruangan besar (band 40px di tepi)
@@ -339,20 +339,20 @@ export function drawStatic(ctx) {
   // MEJA BUNDAR COUNCIL — pusat ruangan, 6 kursi mengelilingi (revisi-5 dari
   // gambar referensi operator). Lingkaran digambar arc() (bebas grid px()).
   // Kayu: bidang utama + tepi gelap + highlight serat.
-  bayang(ctx, 500, 292, 96, 40, 0.22);
-  silinder(ctx, 500, 296, 86, 46, 26);   // silinder: elips atas di y270, sisi 26px
+  bayang(ctx, 500, 320, 96, 40, 0.22);
+  silinder(ctx, 500, 324, 86, 46, 26);   // silinder: elips atas di y270, sisi 26px
   ctx.strokeStyle = "rgba(122,80,40,0.30)"; ctx.lineWidth = 2;
   for (const [rx, ry] of [[24, 13], [42, 23], [60, 33]]) {
-    ctx.beginPath(); ctx.ellipse(500, 270, rx, ry, 0, 0.3, Math.PI - 0.3); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(500, 298, rx, ry, 0, 0.3, Math.PI - 0.3); ctx.stroke();
   }
   // dokumen & mug di atas meja bundar
-  px(ctx, 462, 258, 36, 24, "#f8fafc"); px(ctx, 467, 263, 24, 4, "rgba(60,40,20,0.25)"); px(ctx, 467, 270, 18, 4, "rgba(60,40,20,0.25)");
-  px(ctx, 506, 274, 36, 24, "#f8fafc"); px(ctx, 511, 279, 24, 4, "rgba(60,40,20,0.25)");
-  px(ctx, 494, 286, 12, 14, "#f8fafc"); px(ctx, 506, 290, 5, 7, "#f8fafc");
+  px(ctx, 462, 286, 36, 24, "#f8fafc"); px(ctx, 467, 291, 24, 4, "rgba(60,40,20,0.25)"); px(ctx, 467, 298, 18, 4, "rgba(60,40,20,0.25)");
+  px(ctx, 506, 302, 36, 24, "#f8fafc"); px(ctx, 511, 307, 24, 4, "rgba(60,40,20,0.25)");
+  px(ctx, 494, 314, 12, 14, "#f8fafc"); px(ctx, 506, 318, 5, 7, "#f8fafc");
   // 6 kursi semi-3D mengelilingi meja: bayangan + dudukan elips + sandaran
   // berdiri menghadap meja (sisi menjauhi meja)
   for (const s of GATHER_SPOTS) {
-    const arahMeja = Math.atan2(290 - s.y, 500 - s.x); // menuju pusat meja
+    const arahMeja = Math.atan2(318 - s.y, 500 - s.x); // menuju pusat meja
     bayang(ctx, s.x, s.y + 6, 24, 9, 0.15);
     ctx.fillStyle = "#8d99ae"; ctx.beginPath(); ctx.ellipse(s.x, s.y, 22, 12, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "#6b7a8f"; ctx.beginPath(); ctx.ellipse(s.x, s.y, 22, 12, 0, 0, Math.PI); ctx.fill();
