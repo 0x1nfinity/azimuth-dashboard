@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Azimuth — paper desk</title>
+<link rel="stylesheet" href="style.css?v=1791777494124">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="logo">◈</span>
+    <h1>AZIMUTH</h1>
+    <span class="sub">DLMM liquidity desk · Meteora</span>
+  </div>
+  <span id="statusPill" class="pill idle">memuat…</span>
+  <div class="badges">
+    <span id="badge-mode" class="badge">—</span>
+    <span id="badge-slots" class="badge">—</span>
+    <span id="badge-push" class="badge paper">● push…</span>
+      <span id="badge-cadence" class="badge">—</span>
+  </div>
+</header>
+
+<div class="layout">
+  <section class="office-wrap" aria-label="Trading office">
+    <div class="diorama">
+      <canvas id="office"></canvas>
+      <div class="caption">
+        <span id="office-note">menghidupkan kantor…</span>
+        <span>klik agent utk profil · klik papan utk detail · poll 5s + SSE</span>
+      </div>
+    </div>
+    <aside id="agentPanel" aria-label="Profil agent">
+      <button id="closePanel" title="Tutup">✕</button>
+      <div id="agentAvatar">🙂</div>
+      <div class="ap-nama" id="agentNama">—</div>
+      <div class="ap-peran" id="agentPeran">—</div>
+      <div class="ap-row"><span>status</span><b id="agentStatus">—</b></div>
+      <div class="ap-row"><span>aktivitas</span><b id="agentTugas">—</b></div>
+    </aside>
+  </section>
+
+  <main>
+    <section aria-label="Trading boards">
+      <h2>Boards <span class="spacer"></span><span class="note" id="boards-note">—</span></h2>
+      <div class="data-grid">
+        <article class="board" data-board="positions">
+          <header><span class="b-title">POSITIONS</span><span class="b-count" id="led-positions">—</span></header>
+          <div class="b-body" id="bd-positions"><div class="b-empty">memuat…</div></div>
+        </article>
+        <article class="board" data-board="pnl">
+          <header><span class="b-title">P&amp;L</span><span class="b-count">◎ SOL</span></header>
+          <div class="b-body" id="bd-pnl"><div class="b-empty">memuat…</div></div>
+        </article>
+        <article class="board" data-board="perf">
+          <header><span class="b-title">PERF</span><span class="b-count">last 20</span></header>
+          <div class="b-body" id="bd-perf"><div class="b-empty">memuat…</div></div>
+        </article>
+        <article class="board" data-board="lessons">
+          <header><span class="b-title">LESSONS</span><span class="b-count" id="led-lessons">—</span></header>
+          <div class="b-body" id="bd-lessons"><div class="b-empty">memuat…</div></div>
+        </article>
+      </div>
+    </section>
+
+    <section aria-label="Decision log">
+      <h2>Decision log <span class="spacer"></span><span class="note" id="lessons-note">—</span></h2>
+      <div id="decisions" class="feed"></div>
+    </section>
+
+    <section class="usage" aria-label="LLM tokens">
+      <h3>LLM tokens today</h3>
+      <div id="usage-bars"></div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <span id="foot-lessons">—</span> · <span id="foot-updated">—</span>
+</footer>
+
+<div id="boardModal" class="bmodal" hidden>
+  <div class="bmodal-card">
+    <header><span class="b-title" id="bmodal-title">—</span><button id="bmodal-close" title="Tutup">✕</button></header>
+    <div class="bmodal-body" id="bmodal-body"></div>
+    <footer class="bmodal-foot">klik di luar kartu atau Esc untuk menutup</footer>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script>
+// jangan biarkan kegagalan office mati diam-diam — tampilkan di caption
+window.__azimuthErr = (msg) => {
+  const el = document.getElementById("office-note");
+  if (el) el.textContent = "office error: " + String(msg).slice(0, 140);
+};
+window.addEventListener("error", (e) => window.__azimuthErr?.(e.message ?? e));
+</script>
+<script>window.AZIMUTH_SNAPSHOT_URL="https://raw.githubusercontent.com/0x1nfinity/azimuth-dashboard/data/snapshot.json";</script>
+  <script type="module" src="app.js?v=1791777494124"></script>
+</body>
+</html>
