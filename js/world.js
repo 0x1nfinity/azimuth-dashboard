@@ -32,13 +32,16 @@ const C = {
 // ---------- layout ----------
 // 6 meja 2 kolom × 3 baris, kolom digeser ke dalam; tengah = meja meeting.
 // Lantai dalam = 40..960 × 40..600 (dinding tebal 40 di tepi kanvas).
+// REVISI-6 (gambar referensi operator): baris ATAS 4 meja mengapit meja bundar
+// (bundar = slot ke-5 di tengah baris, paruh atas ruangan), baris BAWAH 2 meja
+// di tengah — grid longgar, TIDAK lagi 2 kolom rapat.
 export const DESKS = {
-  bima:  { x: 136, y: 66,  room: "bima" },      // DECIDER — depan layar status
-  bagas: { x: 744, y: 66,  room: "server" },    // ROUTER — dekat rak mini
-  raka:  { x: 136, y: 260, room: "analisis" },  // ANALYST
-  sari:  { x: 744, y: 260, room: "eksekusi" },  // MANAGER
-  maya:  { x: 136, y: 454, room: "eksekusi" },  // AUDITOR
-  citra: { x: 744, y: 454, room: "analisis" },  // CURATOR
+  bima:  { x: 136, y: 147, room: "bima" },      // DECIDER — atas kiri luar
+  raka:  { x: 272, y: 147, room: "analisis" },  // ANALYST — atas kiri dalam
+  sari:  { x: 612, y: 147, room: "eksekusi" },  // MANAGER — atas kanan dalam
+  bagas: { x: 756, y: 147, room: "server" },    // ROUTER — atas kanan luar (dekat rak)
+  maya:  { x: 340, y: 384, room: "eksekusi" },  // AUDITOR — bawah kiri-tengah
+  citra: { x: 540, y: 384, room: "analisis" },  // CURATOR — bawah kanan-tengah
 };
 export const deskChair = (d) => ({ x: d.x + 60, y: d.y + 102 }); // jangkar duduk di kursi (kursi 64px di bawah meja)
 
@@ -46,12 +49,12 @@ export const deskChair = (d) => ({ x: d.x + 60, y: d.y + 102 }); // jangkar dudu
 // celebrasi, dan rapat duduk DI KURSI mengelilingi meja, bukan berdiri.
 // dir = arah hadap chibi saat duduk (0=bawah/ke meja dari utara, dst).
 export const GATHER_SPOTS = [
-  { x: 500, y: 190, dir: 0 },   // utara — menghadap meja (ke bawah)
-  { x: 604, y: 247, dir: 2 },   // timur laut — menghadap kiri
-  { x: 604, y: 367, dir: 2 },   // tenggara — menghadap kiri
-  { x: 500, y: 424, dir: 1 },   // selatan — menghadap meja (ke atas)
-  { x: 396, y: 367, dir: 3 },   // barat daya — menghadap kanan
-  { x: 396, y: 247, dir: 3 },   // barat laut — menghadap kanan
+  { x: 500, y: 117, dir: 0 },   // utara — menghadap meja (ke bawah)
+  { x: 576, y: 161, dir: 2 },   // timur laut — menghadap kiri
+  { x: 576, y: 249, dir: 2 },   // tenggara — menghadap kiri
+  { x: 500, y: 293, dir: 1 },   // selatan — menghadap meja (ke atas)
+  { x: 424, y: 249, dir: 3 },   // barat daya — menghadap kanan
+  { x: 424, y: 161, dir: 3 },   // barat laut — menghadap kanan
 ];
 
 // ---------- graf jalan ----------
@@ -63,36 +66,30 @@ export const GATHER_SPOTS = [
 // x304 & x696 (64px dari meja meeting), x912 (16px meja/16px dinding).
 export const NODES = {};
 function n(id, x, y) { NODES[id] = { id, x, y, adj: new Set() }; }
-// Sisi kiri/kanan (meja bundar menutup tengah): h1 y210 & h2 y404 hanya di
-// kolom sisi; penyeberangan tengah lewat lintasan ATAS (t_*, y150) dan BAWAH
-// (b_*, y520) yang memutari meja bundar (bbox 415..585 × 222..392 + margin).
-const H_XS = [88, 196, 304, 696, 804, 912];
-H_XS.forEach((x) => { n(`h1_${x}`, x, 210); n(`h2_${x}`, x, 404); });
+// Koridor SATU baris tengah (y320, di bawah meja bundar & antar baris meja)
+// + baris bawah (y532). Chibi margin ±32px: y320 vs bundar-bawah 285 & monitor
+// bawah 370; y532 vs kursi bawah 490 & dinding 600.
+const H_XS = [88, 196, 340, 500, 660, 804, 912];
+const B_XS = [88, 500];
+H_XS.forEach((x) => n(`h1_${x}`, x, 320));
+B_XS.forEach((x) => n(`b_${x}`, x, 532));
 const E = (a, b) => { NODES[a].adj.add(b); NODES[b].adj.add(a); };
-for (const row of ["h1", "h2"]) {
-  [88, 196, 304].forEach((x, i) => { if (i) E(`${row}_${[88, 196, 304][i - 1]}`, `${row}_${x}`); });
-  [696, 804, 912].forEach((x, i) => { if (i) E(`${row}_${[696, 804, 912][i - 1]}`, `${row}_${x}`); });
-}
-for (const x of [88, 304, 696, 912]) E(`h1_${x}`, `h2_${x}`);
-// lintasan atas & bawah (menyeberang kiri↔kanan mengitari meja bundar)
-for (const x of [304, 420, 580, 696]) { n(`t_${x}`, x, 150); n(`b_${x}`, x, 520); }
-for (const xs of [[304, 420, 580, 696]]) {
-  xs.forEach((x, i) => { if (i) { E(`t_${xs[i - 1]}`, `t_${x}`); E(`b_${xs[i - 1]}`, `b_${x}`); } });
-}
-E("h1_304", "t_304"); E("h2_304", "b_304"); E("h1_696", "t_696"); E("h2_696", "b_696");
+H_XS.forEach((x, i) => { if (i) E(`h1_${H_XS[i - 1]}`, `h1_${x}`); });
+B_XS.forEach((x, i) => { if (i) E(`b_${B_XS[i - 1]}`, `b_${x}`); });
+for (const x of [88, 500]) E(`h1_${x}`, `b_${x}`);
 for (const [id, d] of Object.entries(DESKS)) n(`desk_${id}`, deskChair(d).x, deskChair(d).y);
-E("desk_bima", "h1_196"); E("desk_bagas", "h1_804");
-E("desk_raka", "h2_196"); E("desk_maya", "h2_196");
-E("desk_sari", "h2_804"); E("desk_citra", "h2_804");
+E("desk_bima", "h1_196"); E("desk_raka", "h1_340");
+E("desk_sari", "h1_660"); E("desk_bagas", "h1_804");
+E("desk_maya", "b_500"); E("desk_citra", "b_500");
 // titik ngopi di depan counter dinding atas-kiri (bebas dari meja bima x136)
 n("coffee_0", 88, 150); n("coffee_1", 88, 196);
-E("coffee_0", "coffee_1"); E("coffee_1", "h1_88");
-// kursi meja bundar: utara↔lintasan atas, selatan↔bawah, samping↔vertikal
-GATHER_SPOTS.forEach((s, i) => {
-  n(`gather_${i}`, s.x, s.y);
-  const tether = i === 0 ? "t_420" : i === 3 ? "b_580" : i < 3 ? "t_696" : "b_304";
-  E(`gather_${i}`, tether);
-});
+E("coffee_0", "coffee_1"); E("coffee_1", "h1_88"); E("h1_88", "b_88");
+// RING kursi meja bundar: kursi terhubung antar-tetangga (jalur menempel sisi
+// meja — chord r95 tak pernah memotong rim r80), pintu masuk ring = kursi
+// selatan → koridor tengah. Chibi "berkeliling" meja lewat ring ini.
+GATHER_SPOTS.forEach((s, i) => n(`gather_${i}`, s.x, s.y));
+for (let i = 0; i < 6; i++) E(`gather_${i}`, `gather_${(i + 1) % 6}`);
+E("gather_3", "h1_500");
 
 export function shortestPath(fromId, toId) {
   if (fromId === toId) return [toId];
@@ -245,13 +242,12 @@ export function drawStatic(ctx) {
     ctx.fillStyle = "#caa06b"; ctx.fillRect(x + 24, y + 24, w - 48, h - 48);      // garis dalam
     ctx.fillStyle = "#e9ddc2"; ctx.fillRect(x + 34, y + 34, w - 68, h - 68);      // inti krem
   };
-  rug(96, 244, 200, 352);   // kolom meja kiri (raka/maya)
-  rug(704, 244, 200, 352);  // kolom meja kanan (sari/citra)
-  // karpet bundar area council — lantai (bebas dilewati), hanya visual
-  ctx.fillStyle = "#b98d5e"; ctx.beginPath(); ctx.arc(500, 307, 168, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#e9ddc2"; ctx.beginPath(); ctx.arc(500, 307, 152, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#caa06b"; ctx.beginPath(); ctx.arc(500, 307, 128, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#e9ddc2"; ctx.beginPath(); ctx.arc(500, 307, 114, 0, Math.PI * 2); ctx.fill();
+  rug(120, 116, 760, 150);  // zona baris meja atas (4 meja + meja bundar)
+  rug(300, 356, 400, 150);  // zona 2 meja bawah
+  // karpet bundar area council (center mengikuti meja bundar y205)
+  for (const [r, c] of [[150, "#b98d5e"], [136, "#e9ddc2"], [116, "#caa06b"], [104, "#e9ddc2"]]) {
+    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(500, 205, r, 0, Math.PI * 2); ctx.fill();
+  }
 
   // dinding luar bata — TANPA sekat: satu ruangan besar (band 40px di tepi)
   dindingBata(ctx, 0, 0, W, 40);
@@ -259,12 +255,13 @@ export function drawStatic(ctx) {
   dindingBata(ctx, 0, 0, 40, H);
   dindingBata(ctx, W - 40, 0, W, H);
 
-  // layar status besar di dinding atas (runLabel digambar per frame)
-  px(ctx, 356, 32, 288, 76, "#2b3442"); px(ctx, 364, 40, 272, 60, "#141a24");
-  px(ctx, 374, 50, 100, 12, "rgba(125,211,252,0.5)");
-  px(ctx, 374, 72, 190, 8, "rgba(125,211,252,0.25)");
-  px(ctx, 560, 50, 120, 12, "rgba(251,191,36,0.4)");
-  px(ctx, 628, 72, 50, 8, "rgba(251,191,36,0.25)");
+  // layar status dinding atas (y32..88, span 300..700 — 28-72% lebar ala referensi;
+  // dipendekkan supaya kursi utara meja bundar (y110) tak menabrak)
+  px(ctx, 300, 32, 400, 56, "#2b3442"); px(ctx, 308, 38, 384, 44, "#141a24");
+  px(ctx, 318, 46, 120, 10, "rgba(125,211,252,0.5)");
+  px(ctx, 318, 64, 200, 7, "rgba(125,211,252,0.25)");
+  px(ctx, 556, 46, 124, 10, "rgba(251,191,36,0.4)");
+  px(ctx, 618, 64, 60, 7, "rgba(251,191,36,0.25)");
 
   // counter kopi menempel dinding ATAS kiri (x 48..128 — bebas meja bima x136);
   // spot ngopi (88,150)/(88,196) di bawahnya
@@ -290,16 +287,16 @@ export function drawStatic(ctx) {
   // MEJA BUNDAR COUNCIL — pusat ruangan, 6 kursi mengelilingi (revisi-5 dari
   // gambar referensi operator). Lingkaran digambar arc() (bebas grid px()).
   // Kayu: bidang utama + tepi gelap + highlight serat.
-  ctx.fillStyle = "#7c5a35"; ctx.beginPath(); ctx.arc(500, 307, 86, 0, Math.PI * 2); ctx.fill();   // rim
-  ctx.fillStyle = "#b98a56"; ctx.beginPath(); ctx.arc(500, 307, 79, 0, Math.PI * 2); ctx.fill();   // bidang
-  ctx.fillStyle = "#caa06b"; ctx.beginPath(); ctx.arc(494, 301, 64, 0, Math.PI * 2); ctx.fill();   // highlight
-  ctx.fillStyle = "#b98a56"; ctx.beginPath(); ctx.arc(500, 307, 58, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#7c5a35"; ctx.beginPath(); ctx.arc(500, 205, 86, 0, Math.PI * 2); ctx.fill();   // rim
+  ctx.fillStyle = "#b98a56"; ctx.beginPath(); ctx.arc(500, 205, 79, 0, Math.PI * 2); ctx.fill();   // bidang
+  ctx.fillStyle = "#caa06b"; ctx.beginPath(); ctx.arc(494, 199, 64, 0, Math.PI * 2); ctx.fill();   // highlight
+  ctx.fillStyle = "#b98a56"; ctx.beginPath(); ctx.arc(500, 205, 58, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = "rgba(122,80,40,0.30)"; ctx.lineWidth = 2;
-  for (const rr of [24, 42, 60]) { ctx.beginPath(); ctx.arc(500, 307, rr, 0.3, Math.PI - 0.3); ctx.stroke(); }
+  for (const rr of [24, 42, 60]) { ctx.beginPath(); ctx.arc(500, 205, rr, 0.3, Math.PI - 0.3); ctx.stroke(); }
   // dokumen & mug di atas meja bundar
-  px(ctx, 462, 296, 36, 24, "#f8fafc"); px(ctx, 467, 301, 24, 4, "rgba(60,40,20,0.25)"); px(ctx, 467, 308, 18, 4, "rgba(60,40,20,0.25)");
-  px(ctx, 506, 312, 36, 24, "#f8fafc"); px(ctx, 511, 317, 24, 4, "rgba(60,40,20,0.25)");
-  px(ctx, 494, 336, 12, 14, "#f8fafc"); px(ctx, 506, 340, 5, 7, "#f8fafc");
+  px(ctx, 462, 194, 36, 24, "#f8fafc"); px(ctx, 467, 199, 24, 4, "rgba(60,40,20,0.25)"); px(ctx, 467, 206, 18, 4, "rgba(60,40,20,0.25)");
+  px(ctx, 506, 210, 36, 24, "#f8fafc"); px(ctx, 511, 215, 24, 4, "rgba(60,40,20,0.25)");
+  px(ctx, 494, 234, 12, 14, "#f8fafc"); px(ctx, 506, 238, 5, 7, "#f8fafc");
   // 6 kursi mengelilingi meja (posisi = GATHER_SPOTS; sprite sama dgn kursi meja)
   for (const s of GATHER_SPOTS) {
     if (!tile(ctx, 5, 4, s.x - 32, s.y - 22, 4)) {
@@ -309,7 +306,7 @@ export function drawStatic(ctx) {
 
   // tanaman sudut bawah — 2 saja (tengah bawah kini lintasan b_*, tanaman
   // lama di (320,552)/(680,552) menutup lintasan y520)
-  plant(ctx, 80, 560); plant(ctx, 897, 560);
+  plant(ctx, 150, 430); plant(ctx, 906, 430);
 
   // poster di dinding atas — celah antara counter/layar/rak, bebas dari monitor
   // baris 1 (bima 154..238, bagas 772..836) dan layar status (356..644);
@@ -319,8 +316,8 @@ export function drawStatic(ctx) {
     px(ctx, x + 10, y + 5, 14, 24, aksen); px(ctx, x + w - 30, y + 5, 20, 24, "rgba(255,255,255,0.45)");
     px(ctx, x + 30, y + 13, w - 60, 5, "rgba(60,40,20,0.35)");
   };
-  poster(256, 38, 80, "#e8f0fe", "#7dd3fc");
-  poster(664, 38, 80, "#fde8f4", "#f472b6");
+  poster(190, 38, 80, "#e8f0fe", "#7dd3fc");
+  poster(770, 38, 80, "#fde8f4", "#f472b6");
 }
 
 // ---------- layer dinamis (per frame, gated by tier) ----------
@@ -413,7 +410,7 @@ export function drawWorld(ctx, t, opts = {}) {
 
 function drawScreenLabel(ctx, runLabel) {
   ctx.fillStyle = "#7dd3fc"; ctx.font = "600 14px system-ui"; ctx.textAlign = "left";
-  ctx.fillText(runLabel || "Azimuth — siaga", 368, 88);
+  ctx.fillText(runLabel || "Azimuth — siaga", 312, 76);
 }
 
 export function hexA(hex, a) {
