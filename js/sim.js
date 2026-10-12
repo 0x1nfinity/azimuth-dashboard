@@ -565,7 +565,7 @@ export class OfficeSim {
           setTimeout(() => { p.holdCup = true; p.say(rand(["Kopi dulu~", "Es kopi, manis!"]), 3000); }, 1500);
           setTimeout(() => {
             p.holdCup = false; this.counterBusy.delete(spot); p.behavior = "wander";
-            this.sendTo(p, rand(["h2_304", "b_420", "h2_696"]), "idle");
+            this.sendTo(p, rand(["b_88", "b_500", "h1_660"]), "idle");
           }, 9000 + Math.random() * 4000);
         }
       } else if (r < 0.55) { // ngobrol berdua di koridor
@@ -575,7 +575,7 @@ export class OfficeSim {
         const partner = rand(others);
         if (partner) {
           p.behavior = partner.behavior = "chat";
-          const spot = NODES[rand(["h1_304", "b_420", "h1_696", "t_420"])];
+          const spot = NODES[rand(["h1_196", "b_500", "h1_660", "h1_500"])];
           // berdua BERHADAPAN kiri↔kanan dengan jarak — dulu satu titik (menumpuk)
           this.sendToXY(p, spot.x - 19, spot.y, "idle");
           this.sendToXY(partner, spot.x + 19, spot.y, "idle");
@@ -588,7 +588,7 @@ export class OfficeSim {
         }
       } else { // jalan santai / pulang ke meja
         p.behavior = "wander";
-        this.sendTo(p, Math.random() < 0.5 ? `desk_${p.id}` : rand(["t_420", "h2_304", "h1_912"]), "idle");
+        this.sendTo(p, Math.random() < 0.5 ? `desk_${p.id}` : rand(["h1_340", "b_500", "h1_912"]), "idle");
       }
     }
   }
