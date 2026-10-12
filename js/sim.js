@@ -266,45 +266,67 @@ export class Person {
 
     ctx.restore();
 
+    // Agent yang BEKERJA duduk di meja (jangkar y+102) — tag melayang di atas
+    // kepala akan menempel PERSIS di wajah monitor (monitor face y-10..y+42,
+    // tag dulu y+3..y+22). Fix 2026-10-12: saat bekerja, ikon+nama+balon
+    // digambar MENEMPEL di MEJA (di atas monitor meja sendiri), bukan di atas
+    // kepala. Di luar meja (jalan/idle/ngopi) tetap melayang di atas kepala.
+    const diMeja = this.pose === "working" && DESKS[this.id];
+    const meja = diMeja ? DESKS[this.id] : null;
+
     // ikon tugas saat bekerja (di atas name tag)
     if (this.pose === "working" || (this.id === "bagas" && this.statusRing === "running")) {
       ctx.save();
       ctx.font = "600 14px system-ui";
-      const teks = this.id === "bagas" ? "🔧" : this.ikon;
-      const w = 34;
-      ctx.fillStyle = hexA(this.color, 0.92);
-      ctx.beginPath(); ctx.roundRect(this.x - w / 2, this.y - F - 34, w, 26, 9); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(this.x - 5, this.y - F - 26); ctx.lineTo(this.x + 5, this.y - F - 26); ctx.lineTo(this.x, this.y - F - 19); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(teks, this.x, this.y - F - 21);
+      if (meja) {
+        // nameplate gabung "ikon nama" tepat di atas monitor meja
+        const label = (this.id === "bagas" ? "🔧" : this.ikon) + " " + this.nama;
+        const lw = ctx.measureText(label).width + 16;
+        ctx.fillStyle = hexA(this.color, 0.92);
+        ctx.beginPath(); ctx.roundRect(meja.x + 60 - lw / 2, meja.y - 36, lw, 20, 8); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(label, meja.x + 60, meja.y - 26);
+      } else {
+        const teks = this.id === "bagas" ? "🔧" : this.ikon;
+        const w = 34;
+        ctx.fillStyle = hexA(this.color, 0.92);
+        ctx.beginPath(); ctx.roundRect(this.x - w / 2, this.y - F - 34, w, 26, 9); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(this.x - 5, this.y - F - 26); ctx.lineTo(this.x + 5, this.y - F - 26); ctx.lineTo(this.x, this.y - F - 19); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(teks, this.x, this.y - F - 21);
+      }
       ctx.restore();
     }
 
-    // name tag (di atas kepala)
-    ctx.font = "700 13px system-ui";
-    const tw = ctx.measureText(this.nama).width;
-    const tagY = this.y - F - 21;
-    ctx.fillStyle = "rgba(15,23,42,0.82)";
-    ctx.beginPath(); ctx.roundRect(this.x - tw / 2 - 8, tagY, tw + 16, 19, 9); ctx.fill();
-    if (this.statusRing === "running") { ctx.fillStyle = "#60a5fa"; ctx.beginPath(); ctx.arc(this.x - tw / 2 + 1, tagY + 9.5, 3, 0, Math.PI * 2); ctx.fill(); }
-    else if (this.statusRing === "error") { ctx.fillStyle = "#f87171"; ctx.beginPath(); ctx.arc(this.x - tw / 2 + 1, tagY + 9.5, 3, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = "#f8fafc"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(this.nama, this.x + (this.statusRing ? 3 : 0), tagY + 10);
-    ctx.textBaseline = "alphabetic";
+    // name tag (di atas kepala — hanya saat TIDAK di meja; yang di meja sudah
+    // memakai nameplate gabung di atas)
+    if (!meja) {
+      ctx.font = "700 13px system-ui";
+      const tw = ctx.measureText(this.nama).width;
+      const tagY = this.y - F - 21;
+      ctx.fillStyle = "rgba(15,23,42,0.82)";
+      ctx.beginPath(); ctx.roundRect(this.x - tw / 2 - 8, tagY, tw + 16, 19, 9); ctx.fill();
+      if (this.statusRing === "running") { ctx.fillStyle = "#60a5fa"; ctx.beginPath(); ctx.arc(this.x - tw / 2 + 1, tagY + 9.5, 3, 0, Math.PI * 2); ctx.fill(); }
+      else if (this.statusRing === "error") { ctx.fillStyle = "#f87171"; ctx.beginPath(); ctx.arc(this.x - tw / 2 + 1, tagY + 9.5, 3, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = "#f8fafc"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(this.nama, this.x + (this.statusRing ? 3 : 0), tagY + 10);
+      ctx.textBaseline = "alphabetic";
+    }
 
-    // balon ucapan (teks — hanya saat aktif)
+    // balon ucapan (teks — hanya saat aktif); di meja → di atas nameplate meja
     if (this.bubble) {
       ctx.save();
       ctx.font = "600 13px system-ui";
       const w = Math.max(ctx.measureText(this.bubble.text).width + 18, 30);
-      const by = this.y - F - 34;
+      const by = meja ? meja.y - 66 : this.y - F - 34;
+      const bx = meja ? meja.x + 60 : this.x;
       ctx.fillStyle = "rgba(255,255,255,0.96)";
-      ctx.beginPath(); ctx.roundRect(this.x - w / 2, by, w, 26, 9); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(this.x - 5, by + 26); ctx.lineTo(this.x + 5, by + 26); ctx.lineTo(this.x, by + 33); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(bx - w / 2, by, w, 26, 9); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(bx - 5, by + 26); ctx.lineTo(bx + 5, by + 26); ctx.lineTo(bx, by + 33); ctx.closePath(); ctx.fill();
       ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.roundRect(this.x - w / 2, by, w, 26, 9); ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(bx - w / 2, by, w, 26, 9); ctx.stroke();
       ctx.fillStyle = "#0f172a"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(this.bubble.text, this.x, by + 13);
+      ctx.fillText(this.bubble.text, bx, by + 13);
       ctx.restore();
     }
   }
@@ -512,7 +534,7 @@ export class OfficeSim {
           setTimeout(() => { p.holdCup = true; p.say(rand(["Kopi dulu~", "Es kopi, manis!"]), 3000); }, 1500);
           setTimeout(() => {
             p.holdCup = false; this.counterBusy.delete(spot); p.behavior = "wander";
-            this.sendTo(p, `h2_${rand([288, 500, 712])}`, "idle");
+            this.sendTo(p, `h2_${rand([304, 500, 696])}`, "idle");
           }, 9000 + Math.random() * 4000);
         }
       } else if (r < 0.55) { // ngobrol berdua di koridor
@@ -522,7 +544,7 @@ export class OfficeSim {
         const partner = rand(others);
         if (partner) {
           p.behavior = partner.behavior = "chat";
-          const spot = rand(["h1_288", "h2_500", "h1_712"]);
+          const spot = rand(["h1_304", "h2_500", "h1_696"]);
           this.sendTo(p, spot, "sitting");
           this.sendTo(partner, spot, "sitting");
           const line = rand(IDLE_CHAT);
@@ -531,7 +553,7 @@ export class OfficeSim {
         }
       } else { // jalan santai / pulang ke meja
         p.behavior = "wander";
-        this.sendTo(p, Math.random() < 0.5 ? `desk_${p.id}` : rand(["h1_500", "h2_288", "h1_880"]), "idle");
+        this.sendTo(p, Math.random() < 0.5 ? `desk_${p.id}` : rand(["h1_500", "h2_304", "h1_912"]), "idle");
       }
     }
   }
