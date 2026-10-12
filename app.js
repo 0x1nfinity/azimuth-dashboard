@@ -184,6 +184,8 @@ function renderChrome(d) {
 // ---------- papan data HTML 2×2 (pengganti totem canvas + roster THE DESK) ----------
 const fmtPct = (v, dp = 2) => `${v >= 0 ? "+" : ""}${Number(v ?? 0).toFixed(dp)}`;
 function renderBoards(d) {
+  // simbol unit mengikuti mode snapshot: solMode → ◎ (nilai memang SOL), bukan $
+  const sym = d.meta?.solMode ? "◎" : "$";
   const pn = d.pnl ?? {};
   const pos = d.positions ?? [];
 
@@ -192,7 +194,7 @@ function renderBoards(d) {
     ? pos.slice(0, 6).map((p) => `
       <div class="b-row">
         <span class="k">${esc(p.pair)} <span class="dim">${p.in_range ? "🟢 in" : `🔴 OOR ${p.oor_minutes ?? 0}m`}</span></span>
-        <span class="num ${p.pnl_pct >= 0 ? "good" : "bad"}">${fmtPct(p.pnl_pct, 1)}%<i>${Number(p.fees ?? 0).toFixed(3)}◎</i></span>
+        <span class="num ${p.pnl_pct >= 0 ? "good" : "bad"}">${fmtPct(p.pnl_pct, 1)}%<i>${sym}${Number(p.fees ?? 0).toFixed(3)}</i></span>
       </div>`).join("") + (pos.length > 6 ? `<div class="b-empty">+${pos.length - 6} posisi lagi…</div>` : "")
     : `<div class="b-empty">tidak ada posisi terbuka</div>`;
   $("led-positions").textContent = `${pos.length} open`;
@@ -209,7 +211,7 @@ function renderBoards(d) {
     rows.push([`paper (pra-live)`, pn.paperRealizedTotal, (pn.paperRealizedTotal ?? 0) >= 0]);
   }
   $("bd-pnl").innerHTML = rows.map(([k, v, good]) => `
-    <div class="b-row"><span class="k">${k}</span><span class="num ${good ? "good" : "bad"}">${fmtPct(v, 3)}◎</span></div>`).join("") +
+    <div class="b-row"><span class="k">${k}</span><span class="num ${good ? "good" : "bad"}">${fmtPct(v, 3)}${sym}</span></div>`).join("") +
     `<div class="b-row"><span class="k">closes</span><span class="num">${pn.realizedCount ?? 0}${pn.mode === "live" ? " live" : ""}${pn.paperRealizedCount != null ? ` · ${pn.paperRealizedCount} paper` : ""} · ${pn.realizedTodayCount ?? 0} tdy</span></div>`;
 
   // PERF — bar chart HTML; snapshot terurut terbaru→terlama, tapi sort eksplisit
@@ -243,13 +245,14 @@ function renderBoards(d) {
     `<div class="b-row"><span class="k">store</span><span class="num">${L.total ?? 0} lessons · ${L.pinned ?? 0} pinned</span></div>`;
   $("led-lessons").textContent = `${L.total ?? 0}`;
 
-  $("boards-note").textContent = `${pos.length} posisi · realized ${d.pnl?.mode === "paper" ? "paper" : "live"} ${fmtPct(pn.realizedTotal ?? 0, 2)}◎`;
+  $("boards-note").textContent = `${pos.length} posisi · realized ${d.pnl?.mode === "paper" ? "paper" : "live"} ${fmtPct(pn.realizedTotal ?? 0, 2)}${sym}`;
 }
 
 // ---------- modal detail papan (klik kartu → tampilan besar, teks besar) ----------
 const BOARD_TITLES = { positions: "POSITIONS", pnl: "P&L", perf: "PERFORMANCE", lessons: "LESSONS" };
 
 function renderBoardDetail(key, d) {
+  const sym = d.meta?.solMode ? "◎" : "$";
   if (key === "positions") {
     const pos = d.positions ?? [];
     if (!pos.length) return `<div class="b-empty">tidak ada posisi terbuka</div>`;
@@ -257,9 +260,9 @@ function renderBoardDetail(key, d) {
       pos.map((p) => `
       <div class="m-row">
         <span>${esc(p.pair)}${p.sim ? ` <span class="dim">sim</span>` : ""}</span>
-        <span>$${Number(p.value ?? 0).toFixed(2)}</span>
+        <span>${sym}${Number(p.value ?? 0).toFixed(2)}</span>
         <span class="${p.pnl_pct >= 0 ? "good" : "bad"}">${fmtPct(p.pnl_pct, 2)}%</span>
-        <span>${Number(p.fees ?? 0).toFixed(4)}◎</span>
+        <span>${sym}${Number(p.fees ?? 0).toFixed(4)}</span>
         <span class="dim">${p.age_minutes ?? "?"}m ${p.in_range ? "🟢 in" : `🔴 OOR ${p.oor_minutes ?? 0}m`}</span>
       </div>`).join("");
   }
@@ -278,7 +281,7 @@ function renderBoardDetail(key, d) {
       rows.push([`realized paper (pra-live)`, pn.paperRealizedTotal, (pn.paperRealizedTotal ?? 0) >= 0]);
     }
     return rows.map(([k, v, good]) => `
-      <div class="b-row"><span class="k">${k}</span><span class="num ${good ? "good" : "bad"}" style="font-size:17px">${fmtPct(v, 4)}◎</span></div>`).join("") +
+      <div class="b-row"><span class="k">${k}</span><span class="num ${good ? "good" : "bad"}" style="font-size:17px">${fmtPct(v, 4)}${sym}</span></div>`).join("") +
       `<div class="b-row"><span class="k">closes</span><span class="num">${pn.realizedCount ?? 0} ${modeLbl}${pn.paperRealizedCount != null ? ` · ${pn.paperRealizedCount} paper` : ""} · ${pn.realizedTodayCount ?? 0} today</span></div>`;
   }
   if (key === "perf") {
@@ -307,7 +310,7 @@ function renderBoardDetail(key, d) {
       <div class="m-row">
         <span>${esc(String(h.pair ?? "?"))} <span class="dim">${(h.mode ?? "paper") === "live" ? "LIVE" : "paper"}</span></span>
         <span class="${h.pnl_pct >= 0 ? "good" : "bad"}">${fmtPct(h.pnl_pct, 2)}%</span>
-        <span>$${Number(h.fees ?? 0).toFixed(2)}</span>
+        <span>${sym}${Number(h.fees ?? 0).toFixed(2)}</span>
         <span class="dim">${Math.round((h.minutes ?? 0) / 60)}h</span>
         <span class="dim">${esc(String(h.reason ?? ""))}</span>
       </div>`).join("");
@@ -371,7 +374,7 @@ function pilihAgent(id) {
   const role = ROLE_OF[id];
   const a = (state.data?.agents ?? []).find((x) => x.id === role);
   const poseLabel = {
-    working: "sedang bekerja", meeting: "di kickoff", sitting: "istirahat", walking: "jalan",
+    working: "sedang bekerja", meeting: "di kickoff", sitting: p?.behavior === "meeting" ? "duduk di meja council" : "duduk", walking: "jalan",
     idle: p?.behavior === "coffee" ? "ngopi ☕" : "santai",
   };
   $("agentPanel").classList.add("open");
