@@ -201,32 +201,62 @@ function plant(ctx, x, y) {
 }
 const WARNA_LAYAR = { bima: "#7dd3fc", analisis: "#a5b4fc", eksekusi: "#fda4af", server: "#93c5fd" };
 function mh0() { return 42; }
+
+// ── primitif semi-3D (lantai datar, objek bertinggi — 2.5D) ──
+// bayangan lembut di lantai: elips di bawah kaki objek
+function bayang(ctx, x, y, rx, ry, alpha = 0.18) {
+  ctx.fillStyle = `rgba(70,50,25,${alpha})`;
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+}
+// kuboid meja: permukaan atas (terang) + sisi depan (gelap, tinggi h)
+function kuboidMeja(ctx, x, y, w, d, h) {
+  ctx.fillStyle = "#8f6844"; ctx.fillRect(x, y + d, w, h);            // sisi depan
+  ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fillRect(x, y + d, 4, h);   // shading kiri
+  ctx.fillStyle = "#caa06b"; ctx.fillRect(x, y, w, d);                // permukaan atas
+  ctx.fillStyle = "#b98a56"; ctx.fillRect(x + 3, y + 3, w - 6, d - 6);
+  ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fillRect(x + 3, y + 3, w - 6, 5);
+}
+// silinder meja bundar: elips atas + sisi tegak
+function silinder(ctx, cx, cy, rx, ry, h) {
+  ctx.fillStyle = "#7c5a35";
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI); ctx.fill();      // setengah bawah sisi
+  ctx.fillRect(cx - rx, cy - h, rx * 2, h);
+  ctx.beginPath(); ctx.ellipse(cx, cy - h, rx, ry, 0, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#b98a56"; ctx.beginPath(); ctx.ellipse(cx, cy - h, rx * 0.96, ry * 0.96, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#caa06b"; ctx.beginPath(); ctx.ellipse(cx - rx * 0.08, cy - h - ry * 0.08, rx * 0.8, ry * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#b98a56"; ctx.beginPath(); ctx.ellipse(cx, cy - h, rx * 0.72, ry * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+}
 function drawDesk(ctx, d, dekoratif = false) {
   // kursi (sprite Kenney 5,4 s=4 → 64×64; digambar dulu — di belakang meja &
   // agent). Posisi y+42..y+106: bawah kursi 172/366/560 — bebas koridor h1/h2
   // dengan margin badan chibi 32px (verifikasi scripts/office-overlap-check.mjs).
   const cx = d.x + 60, cy = d.y + 42;
   if (dekoratif) {
-    // meja kosong: tanpa kursi, monitor mati (konsep referensi: sebagian meja tak berkursi)
-    px(ctx, d.x, d.y + 16, 120, 80, "#b98a56");
-    px(ctx, d.x, d.y + 16, 120, 9, "#caa06b");
-    px(ctx, d.x, d.y + 46 + 39, 120, 8, "#9a6f42");
+    // meja kosong semi-3D: kuboid + monitor mati berdiri + bayangan
+    bayang(ctx, d.x + 60, d.y + 96 + 8, 66, 16);
+    kuboidMeja(ctx, d.x, d.y + 16, 120, 80, 14);
     const mw = 64, mx = d.x + (120 - mw) / 2;
-    px(ctx, mx - 4, d.y - 14, mw + 8, mh0(), "#2b3442");
-    px(ctx, mx, d.y - 10, mw, 42, "#141a24");
-    px(ctx, mx + 4, d.y - 6, mw - 8, 34, "#1c2532");
+    px(ctx, mx + mw / 2 - 8, d.y + 34, 16, 10, "#232a36");
+    px(ctx, mx + mw / 2 - 18, d.y + 40, 36, 5, "#232a36");
+    px(ctx, mx - 4, d.y - 12, mw + 8, mh0(), "#2b3442");
+    px(ctx, mx, d.y - 8, mw, 42, "#141a24");
+    px(ctx, mx + 4, d.y - 4, mw - 8, 34, "#1c2532");
     return;
   }
+  bayang(ctx, cx, cy + 58, 26, 10, 0.15);
   if (!tile(ctx, 5, 4, cx - 32, cy, 4)) {
     px(ctx, cx - 14, cy + 8, 28, 18, "#6b7a8f");
     px(ctx, cx - 14, cy - 6, 6, 19, "#566275"); px(ctx, cx + 8, cy - 6, 6, 19, "#566275");
   }
-  // meja: 2 tile kayu Kenney (7,4)+(8,4) digabung → 120×80 (proporsi chibi ~50px)
+  // meja agent semi-3D: bayangan + kuboid (tile kayu dipertahankan sbg tekstur atas)
+  bayang(ctx, d.x + 60, d.y + 96 + 8, 66, 16);
+  ctx.fillStyle = "#8f6844"; ctx.fillRect(d.x, d.y + 96, 120, 14);           // sisi depan
+  ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fillRect(d.x, d.y + 96, 4, 14);
   if (!tile(ctx, 7, 4, d.x, d.y + 16, 5, 24, 16)) {
-    px(ctx, d.x, d.y + 16, 120, 40, "#b98a56");
+    px(ctx, d.x, d.y + 16, 120, 80, "#b98a56");
     px(ctx, d.x, d.y + 16, 120, 9, "#caa06b");
     px(ctx, d.x, d.y + 46, 120, 9, "#9a6f42");
-    px(ctx, d.x, d.y + 16, 5, 40, "#7c5a35"); px(ctx, d.x + 115, d.y + 16, 5, 40, "#7c5a35");
+    px(ctx, d.x, d.y + 16, 5, 80, "#7c5a35"); px(ctx, d.x + 115, d.y + 16, 5, 80, "#7c5a35");
   }
   // monitor 64×42 (bima 84×42) — meja 120px, semua elemen diskalakan ikut
   const mw = d === DESKS.bima ? 84 : 64, mh = 42;
@@ -235,8 +265,8 @@ function drawDesk(ctx, d, dekoratif = false) {
   px(ctx, mx, d.y - 10, mw, mh, "#141a24");
   px(ctx, mx + 4, d.y - 6, mw - 8, mh - 8, WARNA_LAYAR[d.room] || "#9fb4d0");
   px(ctx, mx + 8, d.y - 2, 12, 8, "rgba(255,255,255,0.35)");
-  px(ctx, mx + mw / 2 - 8, d.y + 32, 16, 6, "#2b3442");
-  px(ctx, mx + mw / 2 - 18, d.y + 38, 36, 5, "#232a36");
+  px(ctx, mx + mw / 2 - 8, d.y + 30, 16, 8, "#2b3442");
+  px(ctx, mx + mw / 2 - 18, d.y + 36, 36, 5, "#232a36");
   // mug saja (keyboard & mouse dihapus — kurangi kebisingan)
   px(ctx, d.x + 92, d.y + 34, 12, 14, "#f8fafc"); px(ctx, d.x + 104, d.y + 38, 5, 7, "#f8fafc");
 }
@@ -263,9 +293,9 @@ export function drawStatic(ctx) {
     ctx.fillStyle = "#e9ddc2"; ctx.fillRect(x + 34, y + 34, w - 68, h - 68);      // inti krem
   };
   rug(116, 70, 770, 516);   // SATU karpet zona besar di bawah seluruh kisi meja
-  // karpet bundar area council (center mengikuti meja bundar y205)
-  for (const [r, c] of [[150, "#b98d5e"], [136, "#e9ddc2"], [116, "#caa06b"], [104, "#e9ddc2"]]) {
-    ctx.fillStyle = c; ctx.beginPath(); ctx.arc(500, 290, r, 0, Math.PI * 2); ctx.fill();
+  // karpet bundar ELIPS (semi-3D: lingkaran di lantai tampak gepeng) + meja silinder
+  for (const [rx, ry, c] of [[150, 108, "#b98d5e"], [136, 98, "#e9ddc2"], [116, 84, "#caa06b"], [104, 75, "#e9ddc2"]]) {
+    ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(500, 290, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   // dinding luar bata — TANPA sekat: satu ruangan besar (band 40px di tepi)
@@ -282,6 +312,7 @@ export function drawStatic(ctx) {
   px(ctx, 556, 46, 124, 10, "rgba(251,191,36,0.4)");
   px(ctx, 618, 64, 60, 7, "rgba(251,191,36,0.25)");
 
+  bayang(ctx, 88, 128, 48, 12, 0.2);
   // counter kopi menempel dinding ATAS kiri (x 48..128 — bebas meja bima x136);
   // spot ngopi (88,150)/(88,196) di bawahnya
   if (!tile(ctx, 7, 4, 48, 44, 5, 16, 16)) {
@@ -290,6 +321,7 @@ export function drawStatic(ctx) {
   px(ctx, 56, 48, 34, 40, "#3f3244"); px(ctx, 60, 52, 26, 22, "#2b222e"); px(ctx, 64, 56, 7, 5, "#f59e0b"); // mesin kopi
   for (const [mx, my] of [[104, 58], [104, 98]]) { px(ctx, mx, my, 14, 14, "#f8fafc"); px(ctx, mx + 12, my + 4, 4, 7, "#f8fafc"); px(ctx, mx - 5, my + 3, 5, 4, "#7c4a2d"); }
 
+  bayang(ctx, 908, 180, 42, 10, 0.2);
   // rak server mini Bagas — dinding atas kanan: 2 tile s=4 (64px) bertumpuk di
   // x876..940 × y46..174. Bawah rak wajib ≥ h1(210) − margin chibi 32 = 178px —
   // dulu 2×80px sampai y204: chibi yang lewat h1 menembus rak (fix 2026-10-12).
@@ -307,21 +339,29 @@ export function drawStatic(ctx) {
   // MEJA BUNDAR COUNCIL — pusat ruangan, 6 kursi mengelilingi (revisi-5 dari
   // gambar referensi operator). Lingkaran digambar arc() (bebas grid px()).
   // Kayu: bidang utama + tepi gelap + highlight serat.
-  ctx.fillStyle = "#7c5a35"; ctx.beginPath(); ctx.arc(500, 290, 86, 0, Math.PI * 2); ctx.fill();   // rim
-  ctx.fillStyle = "#b98a56"; ctx.beginPath(); ctx.arc(500, 290, 79, 0, Math.PI * 2); ctx.fill();   // bidang
-  ctx.fillStyle = "#caa06b"; ctx.beginPath(); ctx.arc(494, 284, 64, 0, Math.PI * 2); ctx.fill();   // highlight
-  ctx.fillStyle = "#b98a56"; ctx.beginPath(); ctx.arc(500, 290, 58, 0, Math.PI * 2); ctx.fill();
+  bayang(ctx, 500, 292, 96, 40, 0.22);
+  silinder(ctx, 500, 296, 86, 46, 26);   // silinder: elips atas di y270, sisi 26px
   ctx.strokeStyle = "rgba(122,80,40,0.30)"; ctx.lineWidth = 2;
-  for (const rr of [24, 42, 60]) { ctx.beginPath(); ctx.arc(500, 290, rr, 0.3, Math.PI - 0.3); ctx.stroke(); }
+  for (const [rx, ry] of [[24, 13], [42, 23], [60, 33]]) {
+    ctx.beginPath(); ctx.ellipse(500, 270, rx, ry, 0, 0.3, Math.PI - 0.3); ctx.stroke();
+  }
   // dokumen & mug di atas meja bundar
-  px(ctx, 462, 279, 36, 24, "#f8fafc"); px(ctx, 467, 284, 24, 4, "rgba(60,40,20,0.25)"); px(ctx, 467, 291, 18, 4, "rgba(60,40,20,0.25)");
-  px(ctx, 506, 295, 36, 24, "#f8fafc"); px(ctx, 511, 300, 24, 4, "rgba(60,40,20,0.25)");
-  px(ctx, 494, 319, 12, 14, "#f8fafc"); px(ctx, 506, 323, 5, 7, "#f8fafc");
-  // 6 kursi mengelilingi meja (posisi = GATHER_SPOTS; sprite sama dgn kursi meja)
+  px(ctx, 462, 258, 36, 24, "#f8fafc"); px(ctx, 467, 263, 24, 4, "rgba(60,40,20,0.25)"); px(ctx, 467, 270, 18, 4, "rgba(60,40,20,0.25)");
+  px(ctx, 506, 274, 36, 24, "#f8fafc"); px(ctx, 511, 279, 24, 4, "rgba(60,40,20,0.25)");
+  px(ctx, 494, 286, 12, 14, "#f8fafc"); px(ctx, 506, 290, 5, 7, "#f8fafc");
+  // 6 kursi semi-3D mengelilingi meja: bayangan + dudukan elips + sandaran
+  // berdiri menghadap meja (sisi menjauhi meja)
   for (const s of GATHER_SPOTS) {
-    if (!tile(ctx, 5, 4, s.x - 32, s.y - 22, 4)) {
-      px(ctx, s.x - 14, s.y + 2, 28, 18, "#6b7a8f"); px(ctx, s.x - 14, s.y - 12, 6, 19, "#566275"); px(ctx, s.x + 8, s.y - 12, 6, 19, "#566275");
-    }
+    const arahMeja = Math.atan2(290 - s.y, 500 - s.x); // menuju pusat meja
+    bayang(ctx, s.x, s.y + 6, 24, 9, 0.15);
+    ctx.fillStyle = "#8d99ae"; ctx.beginPath(); ctx.ellipse(s.x, s.y, 22, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#6b7a8f"; ctx.beginPath(); ctx.ellipse(s.x, s.y, 22, 12, 0, 0, Math.PI); ctx.fill();
+    // sandaran: busur di sisi belakang kursi (menjauhi meja)
+    const bx = s.x - Math.cos(arahMeja) * 20, by = s.y - Math.sin(arahMeja) * 10;
+    ctx.strokeStyle = "#566275"; ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.ellipse(bx, by - 8, 10, 12, 0, Math.PI * 0.15 + (Math.abs(arahMeja) > Math.PI / 2 ? Math.PI : 0), Math.PI * 0.85 + (Math.abs(arahMeja) > Math.PI / 2 ? Math.PI : 0));
+    ctx.stroke();
   }
 
   // tanaman sudut bawah — 2 saja (tengah bawah kini lintasan b_*, tanaman
