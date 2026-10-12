@@ -184,8 +184,10 @@ function renderChrome(d) {
 // ---------- papan data HTML 2×2 (pengganti totem canvas + roster THE DESK) ----------
 const fmtPct = (v, dp = 2) => `${v >= 0 ? "+" : ""}${Number(v ?? 0).toFixed(dp)}`;
 function renderBoards(d) {
-  // simbol unit mengikuti mode snapshot: solMode → ◎ (nilai memang SOL), bukan $
-  const sym = d.meta?.solMode ? "◎" : "$";
+  // SATU satuan utk seluruh panel (operator 2026-10-12): server mengonversi
+  // ledger (USD-live/SOL-paper) ke satuan pilihan; pnl.units = sumber kebenaran.
+  // Tanpa harga SOL → server kirim USD dan panel $ (jangan pernah ◎ palsu).
+  const sym = d.meta?.solMode && d.pnl?.units === "SOL" ? "◎" : "$";
   const pn = d.pnl ?? {};
   const pos = d.positions ?? [];
 
@@ -199,22 +201,18 @@ function renderBoards(d) {
     : `<div class="b-empty">tidak ada posisi terbuka</div>`;
   $("led-positions").textContent = `${pos.length} open`;
 
-  // P&L — unit PER-BARIS sesuai asal datanya: posisi TERBUKA (pnl/fees berjalan)
-  // mengikuti solMode (SOL); REALIZED ledger bersatuan USD sejati (dlmm mencatat
-  // pnlTrueUsd — "Ledger the realized PnL in true USD"), jadi SELALU $ —
-  // menempelkan ◎ ke angka USD adalah bug "+14.5◎" yang dilaporkan operator.
-  const USD = "$";
+  // P&L — SATU satuan (sym) utk semua baris; nilai realized sudah dikonversi server
   const rows = [
-    ["open", pn.actualPnl, (pn.actualPnl ?? 0) >= 0, sym],
-    ["fees", pn.openFees, true, sym],
-    [`realized ${pn.mode === "paper" ? "paper" : "live"}`, pn.realizedTotal, (pn.realizedTotal ?? 0) >= 0, USD],
-    ["today", pn.realizedToday, (pn.realizedToday ?? 0) >= 0, USD],
+    ["open", pn.actualPnl, (pn.actualPnl ?? 0) >= 0],
+    ["fees", pn.openFees, true],
+    [`realized ${pn.mode === "paper" ? "paper" : "live"}`, pn.realizedTotal, (pn.realizedTotal ?? 0) >= 0],
+    ["today", pn.realizedToday, (pn.realizedToday ?? 0) >= 0],
   ];
-  if (pn.paperRealizedCount != null) {
-    rows.push([`paper (pra-live)`, pn.paperRealizedTotal, (pn.paperRealizedTotal ?? 0) >= 0, USD]);
+  if (pn.paperRealizedTotal != null) {
+    rows.push([`paper (pra-live)`, pn.paperRealizedTotal, (pn.paperRealizedTotal ?? 0) >= 0]);
   }
-  $("bd-pnl").innerHTML = rows.map(([k, v, good, unit]) => `
-    <div class="b-row"><span class="k">${k}</span><span class="num ${good ? "good" : "bad"}">${fmtPct(v, 3)}${unit}</span></div>`).join("") +
+  $("bd-pnl").innerHTML = rows.map(([k, v, good]) => `
+    <div class="b-row"><span class="k">${k}</span><span class="num ${good ? "good" : "bad"}">${fmtPct(v, 3)}${sym}</span></div>`).join("") +
     `<div class="b-row"><span class="k">closes</span><span class="num">${pn.realizedCount ?? 0}${pn.mode === "live" ? " live" : ""}${pn.paperRealizedCount != null ? ` · ${pn.paperRealizedCount} paper` : ""} · ${pn.realizedTodayCount ?? 0} tdy</span></div>`;
 
   // PERF — bar chart HTML; snapshot terurut terbaru→terlama, tapi sort eksplisit
@@ -248,7 +246,7 @@ function renderBoards(d) {
     `<div class="b-row"><span class="k">store</span><span class="num">${L.total ?? 0} lessons · ${L.pinned ?? 0} pinned</span></div>`;
   $("led-lessons").textContent = `${L.total ?? 0}`;
 
-  $("boards-note").textContent = `${pos.length} posisi · realized ${d.pnl?.mode === "paper" ? "paper" : "live"} $${(pn.realizedTotal ?? 0).toFixed(2)}`;
+  $("boards-note").textContent = `${pos.length} posisi · realized ${d.pnl?.mode === "paper" ? "paper" : "live"} ${sym}${(pn.realizedTotal ?? 0).toFixed(2)}`;
 }
 
 // ---------- modal detail papan (klik kartu → tampilan besar, teks besar) ----------
@@ -273,17 +271,17 @@ function renderBoardDetail(key, d) {
     const pn = d.pnl ?? {};
     const modeLbl = pn.mode === "paper" ? "paper" : "live";
     const rows = [
-      ["open (unrealized)", pn.actualPnl, (pn.actualPnl ?? 0) >= 0, sym],
-      ["unclaimed fees", pn.openFees, true, sym],
-      [`realized ${modeLbl}`, pn.realizedTotal, (pn.realizedTotal ?? 0) >= 0, "$"],
-      [`realized today (${modeLbl})`, pn.realizedToday, (pn.realizedToday ?? 0) >= 0, "$"],
-      ["fees realized", pn.feesRealized, true, "$"],
+      ["open (unrealized)", pn.actualPnl, (pn.actualPnl ?? 0) >= 0],
+      ["unclaimed fees", pn.openFees, true],
+      [`realized ${modeLbl}`, pn.realizedTotal, (pn.realizedTotal ?? 0) >= 0],
+      [`realized today (${modeLbl})`, pn.realizedToday, (pn.realizedToday ?? 0) >= 0],
+      ["fees realized", pn.feesRealized, true],
     ];
-    if (pn.paperRealizedCount != null) {
-      rows.push([`realized paper (pra-live)`, pn.paperRealizedTotal, (pn.paperRealizedTotal ?? 0) >= 0, "$"]);
+    if (pn.paperRealizedTotal != null) {
+      rows.push([`realized paper (pra-live)`, pn.paperRealizedTotal, (pn.paperRealizedTotal ?? 0) >= 0]);
     }
-    return rows.map(([k, v, good, unit]) => `
-      <div class="b-row"><span class="k">${k}</span><span class="num ${good ? "good" : "bad"}" style="font-size:17px">${fmtPct(v, 4)}${unit}</span></div>`).join("") +
+    return rows.map(([k, v, good]) => `
+      <div class="b-row"><span class="k">${k}</span><span class="num ${good ? "good" : "bad"}" style="font-size:17px">${fmtPct(v, 4)}${sym}</span></div>`).join("") +
       `<div class="b-row"><span class="k">closes</span><span class="num">${pn.realizedCount ?? 0} ${modeLbl}${pn.paperRealizedCount != null ? ` · ${pn.paperRealizedCount} paper` : ""} · ${pn.realizedTodayCount ?? 0} today</span></div>`;
   }
   if (key === "perf") {
@@ -312,7 +310,7 @@ function renderBoardDetail(key, d) {
       <div class="m-row">
         <span>${esc(String(h.pair ?? "?"))} <span class="dim">${(h.mode ?? "paper") === "live" ? "LIVE" : "paper"}</span></span>
         <span class="${h.pnl_pct >= 0 ? "good" : "bad"}">${fmtPct(h.pnl_pct, 2)}%</span>
-        <span>$${Number(h.fees ?? 0).toFixed(2)}</span>
+        <span>${sym}${Number(h.fees ?? 0).toFixed(2)}</span>
         <span class="dim">${Math.round((h.minutes ?? 0) / 60)}h</span>
         <span class="dim">${esc(String(h.reason ?? ""))}</span>
       </div>`).join("");
