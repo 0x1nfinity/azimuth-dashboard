@@ -29,7 +29,9 @@ const state = { data: null, sim: null, selected: null, lastDecisionTs: null, eta
 
 // Sumber data: backend lokal (/api/overview) atau snapshot eksternal (GitHub
 // Pages — window.AZIMUTH_SNAPSHOT_URL disuntik seed script di index.html).
-// Snapshot eksternal = host statis: tanpa SSE, tanpa ETag, cache-buster ?t=.
+// Snapshot eksternal = host statis: tanpa SSE, tanpa ETag. ?t= hanya menembus
+// cache BROWSER — CDN raw.githubusercontent mengabaikan query string di cache
+// key (TTL 5 mtk), jadi data bisa tertinggal ±5 menit dari push terakhir.
 const OVERVIEW_URL = window.AZIMUTH_SNAPSHOT_URL || "api/overview";
 const SNAPSHOT_EKSTERNAL = Boolean(window.AZIMUTH_SNAPSHOT_URL);
 
