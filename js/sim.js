@@ -183,6 +183,10 @@ export class Person {
     return false;
   }
 
+  // berjalan ke titik koordinat bebas (bukan node) — dipakai obrolan berdua
+  // supaya KIRI-KANAN BERHADAPAN, bukan menumpuk di satu node.
+  goToXY(x, y) { this._pt = { x, y }; this.pose = "walking"; return true; }
+
   nearestNodeId() {
     let best = null, bd = Infinity;
     for (const n of Object.values(NODES)) {
@@ -193,7 +197,19 @@ export class Person {
   }
 
   update(dt, now) {
-    if (this.path.length) {
+    if (this._pt) {
+      const t = this._pt, d = dist(this, t), step = this.speed * dt;
+      if (Math.abs(t.x - this.x) > Math.abs(t.y - this.y)) this._dir = t.x > this.x ? 3 : 2;
+      else this._dir = t.y > this.y ? 0 : 1;
+      if (d <= step) {
+        this.x = t.x; this.y = t.y; this._pt = null;
+        this.pose = this._arrivePose || "idle";
+        if (this.pose === "sitting" && this._seatDir != null) this._dir = this._seatDir;
+      } else {
+        this.x += ((t.x - this.x) / d) * step;
+        this.y += ((t.y - this.y) / d) * step;
+      }
+    } else if (this.path.length) {
       const target = NODES[this.path[0]];
       const d = dist(this, target);
       const step = this.speed * dt;
@@ -206,7 +222,11 @@ export class Person {
       if (d <= step) {
         this.x = target.x; this.y = target.y;
         this.path.shift();
-        if (!this.path.length) this.pose = this._arrivePose || "idle";
+        if (!this.path.length) {
+          this.pose = this._arrivePose || "idle";
+          // duduk di kursi council → hadap meja (bukan arah datang)
+          if (this.pose === "sitting" && this._seatDir != null) this._dir = this._seatDir;
+        }
       } else {
         this.x += ((target.x - this.x) / d) * step;
         this.y += ((target.y - this.y) / d) * step;
@@ -254,7 +274,7 @@ export class Person {
 
     // karakter chibi custom
     const bob0 = jalan ? -Math.abs(Math.sin(t * 10)) * 2 : 0;
-    gambarChibi(ctx, { x: 0, y: 10 + bob0, t, dir: this._dir ?? 0, jalan, bekerja: this.pose === "working", renang: false, tampilan: TAMPILAN[this.id] });
+    gambarChibi(ctx, { x: 0, y: 10 + bob0, t, dir: this._dir ?? 0, jalan, bekerja: this.pose === "working" || this.pose === "sitting", renang: false, tampilan: TAMPILAN[this.id] });
 
     // cangkir di tangan
     if (this.holdCup) {
@@ -462,13 +482,21 @@ export class OfficeSim {
     this.wake();
   }
 
+  sendToXY(p, x, y, pose) {
+    p._arrivePose = pose;
+    p.goToXY(x, y);
+    this.wake();
+  }
+
   startKickoff() {
     const slots = [...this.people.values()];
     slots.forEach((p, i) => {
+      const kursi = i % GATHER_SPOTS.length;
       p.behavior = "meeting";
       p.statusRing = null;
       p.holdCup = false;
-      this.sendTo(p, `gather_${i % GATHER_SPOTS.length}`, "meeting");
+      p._seatDir = GATHER_SPOTS[kursi].dir; // hadap meja bundar saat duduk
+      this.sendTo(p, `gather_${kursi}`, "sitting");
       setTimeout(() => p.say(KICKOFF_LINES[p.id] || "Siap!", 4000), 1200 + i * 350);
     });
     this.kickoffUntil = performance.now() + 6000;
@@ -479,6 +507,7 @@ export class OfficeSim {
     for (const p of this.people.values()) {
       if (p.behavior !== "meeting") continue;
       p.behavior = "wander";
+      p._seatDir = null;
       if (this.working?.has(p.id) && p.id !== "bagas") this.sendTo(p, `desk_${p.id}`, "working");
       else if (p.id === "bagas" && this.debugging) this.sendTo(p, "desk_bagas", "working");
       else this.sendTo(p, `desk_${p.id}`, "idle");
@@ -499,8 +528,10 @@ export class OfficeSim {
     }
     for (const p of this.people.values()) p.say("Yes! Posisi profit! 🎉", 4000);
     [...this.people.values()].forEach((p, i) => {
+      const kursi = i % GATHER_SPOTS.length;
       p.behavior = "meeting";
-      this.sendTo(p, `gather_${i % GATHER_SPOTS.length}`, "meeting");
+      p._seatDir = GATHER_SPOTS[kursi].dir;
+      this.sendTo(p, `gather_${kursi}`, "sitting");
     });
     setTimeout(() => this.disperseMeeting(), 9000);
     this.wake();
@@ -534,7 +565,7 @@ export class OfficeSim {
           setTimeout(() => { p.holdCup = true; p.say(rand(["Kopi dulu~", "Es kopi, manis!"]), 3000); }, 1500);
           setTimeout(() => {
             p.holdCup = false; this.counterBusy.delete(spot); p.behavior = "wander";
-            this.sendTo(p, `h2_${rand([304, 500, 696])}`, "idle");
+            this.sendTo(p, rand(["h2_304", "b_420", "h2_696"]), "idle");
           }, 9000 + Math.random() * 4000);
         }
       } else if (r < 0.55) { // ngobrol berdua di koridor
@@ -544,16 +575,20 @@ export class OfficeSim {
         const partner = rand(others);
         if (partner) {
           p.behavior = partner.behavior = "chat";
-          const spot = rand(["h1_304", "h2_500", "h1_696"]);
-          this.sendTo(p, spot, "sitting");
-          this.sendTo(partner, spot, "sitting");
+          const spot = NODES[rand(["h1_304", "b_420", "h1_696", "t_420"])];
+          // berdua BERHADAPAN kiri↔kanan dengan jarak — dulu satu titik (menumpuk)
+          this.sendToXY(p, spot.x - 19, spot.y, "idle");
+          this.sendToXY(partner, spot.x + 19, spot.y, "idle");
           const line = rand(IDLE_CHAT);
-          setTimeout(() => { p.say(line, 4000); partner.say(rand(["Setuju!", "Haha, iya", "Nanti kubantu"]), 3000); }, 2500);
+          setTimeout(() => {
+            p._dir = 3; partner._dir = 2; // saling menatap
+            p.say(line, 4000); partner.say(rand(["Setuju!", "Haha, iya", "Nanti kubantu"]), 3000);
+          }, 2500);
           setTimeout(() => { p.behavior = partner.behavior = "wander"; }, 8000);
         }
       } else { // jalan santai / pulang ke meja
         p.behavior = "wander";
-        this.sendTo(p, Math.random() < 0.5 ? `desk_${p.id}` : rand(["h1_500", "h2_304", "h1_912"]), "idle");
+        this.sendTo(p, Math.random() < 0.5 ? `desk_${p.id}` : rand(["t_420", "h2_304", "h1_912"]), "idle");
       }
     }
   }
